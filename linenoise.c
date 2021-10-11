@@ -1234,6 +1234,7 @@ int linenoiseHistoryAdd(const char *line)
     /* Add an heap allocated copy of the line in the history.
      * If we reached the max length, remove the older line. */
     linecopy = strdup(line);
+
     if (!linecopy)
         return 0;
     if (history_len == history_max_len) {
