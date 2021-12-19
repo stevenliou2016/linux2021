@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O1 -g -Wall -Werror -Idudect -I.
+CFLAGS = -O1 -g -Wall -Werror -Idudect -I. -DNO_LOG_ACCESS 
 
 GIT_HOOKS := .git/hooks/applied
 DUT_DIR := dudect
@@ -34,9 +34,9 @@ $(GIT_HOOKS):
 	@scripts/install-git-hooks
 	@echo
 
-OBJS := qtest.o report.o console.o harness.o queue.o \
+OBJS := qtest.o report.o tiny.o console.o harness.o queue.o \
         random.o dudect/constant.o dudect/fixture.o dudect/ttest.o \
-        linenoise.o
+        linenoise.o 
 
 deps := $(OBJS:%.o=.%.o.d)
 

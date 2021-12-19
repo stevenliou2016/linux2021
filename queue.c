@@ -71,12 +71,20 @@ bool q_insert_head(queue_t *q, char *s)
     }
     /* copy string  */
     strlcpy(newh->value, s, length + 1);
+    newh->next = NULL;
     /* What if either call to malloc returns NULL? */
-    if (q->tail == NULL) {
-        q->tail = q->head;
+    if (q->head) {
+        newh->next = q->head;
+        if (q->tail == NULL) {
+            q->tail = q->head;
+        }
+        q->head = newh;
+    } else {
+        q->head = newh;
+        if (q->tail == NULL) {
+            q->tail = q->head;
+        }
     }
-    newh->next = q->head;
-    q->head = newh;
     q->size++;
     return true;
 }
@@ -109,13 +117,18 @@ bool q_insert_tail(queue_t *q, char *s)
     newt->next = NULL;
     /* Remember: It should operate in O(1) time */
     /* TODO: Remove the above comment when you are about to implement. */
-    if (q->head == NULL) {
-        q->head = newt;
-    }
-    if (q->tail != NULL) {
+    if (q->tail == NULL) {
+        q->tail = newt;
+        if (q->head == NULL) {
+            q->head = q->tail;
+        }
+    } else {
+        if (q->head == NULL) {
+            q->head = q->tail;
+        }
         q->tail->next = newt;
+        q->tail = newt;
     }
-    q->tail = newt;
     q->size++;
     return true;
 }

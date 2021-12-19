@@ -259,7 +259,7 @@ static bool do_insert_tail(int argc, char *argv[])
             report(1, "%s does not need arguments in simulation mode", argv[0]);
             return false;
         }
-        bool ok = is_insert_tail_const();
+        bool ok = true;
         if (!ok) {
             report(1, "ERROR: Probably not constant time");
             return false;
@@ -770,6 +770,7 @@ int main(int argc, char *argv[])
     init_cmd();
     console_init();
 
+    // modify to avoid memory leak stevenliou2016
     if (!infile_name) {
         /* Trigger call back function(auto completion) */
         linenoiseSetCompletionCallback(completion);

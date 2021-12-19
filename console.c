@@ -1,11 +1,11 @@
 /* Implementation of simple command-line interface */
 
 #include "console.h"
-
 #include <ctype.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,9 +13,10 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
-
 #include "report.h"
+#include "tiny.h"
 
 /* Some global values */
 int simulation = false;
@@ -61,6 +62,8 @@ static int echo = 0;
 static bool quit_flag = false;
 static char *prompt = "cmd> ";
 static bool has_infile = false;
+static bool web_running = false;
+static int web_pid = 0;
 
 /* Optional function to call as part of exit process */
 /* Maximum number of quit functions */
@@ -75,6 +78,7 @@ static bool do_option_cmd(int argc, char *argv[]);
 static bool do_source_cmd(int argc, char *argv[]);
 static bool do_log_cmd(int argc, char *argv[]);
 static bool do_time_cmd(int argc, char *argv[]);
+static bool do_web_cmd(int argc, char *argv[]);
 static bool do_comment_cmd(int argc, char *argv[]);
 
 static void init_in();
@@ -101,6 +105,7 @@ void init_cmd()
     add_cmd("log", do_log_cmd, " file           | Copy output to file");
     add_cmd("time", do_time_cmd, " cmd arg ...    | Time command execution");
     add_cmd("#", do_comment_cmd, " ...            | Display comment");
+    add_cmd("web", do_web_cmd, " ...            | Run web server");
     add_param("simulation", &simulation, "Start/Stop simulation mode", NULL);
     add_param("verbose", &verblevel, "Verbosity level", NULL);
     add_param("error", &err_limit, "Number of errors until exit", NULL);
@@ -287,8 +292,11 @@ static bool do_quit_cmd(int argc, char *argv[])
     for (int i = 0; i < quit_helper_cnt; i++) {
         ok = ok && quit_helpers[i](argc, argv);
     }
-
     quit_flag = true;
+    if (web_running) {
+        kill(web_pid, SIGTERM);
+        wait(NULL);
+    }
     return ok;
 }
 
@@ -432,6 +440,65 @@ static bool do_time_cmd(int argc, char *argv[])
     return ok;
 }
 
+static bool do_web_cmd(int argc, char *argv[])
+{
+    if (argc > 1 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))) {
+        print_help();
+        return 0;
+    }
+
+    struct sockaddr_in clientaddr;
+    int default_port = DEFAULT_PORT, listenfd, connfd;
+    char buf[256];
+    char *path = getcwd(buf, 256);
+    socklen_t clientlen = sizeof clientaddr;
+    web_running = true;
+    if (argc == 2) {
+        if (argv[1][0] >= '0' && argv[1][0] <= '9') {
+            default_port = atoi(argv[1]);
+        } else {
+            path = argv[1];
+            if (chdir(path) != 0) {
+                perror(path);
+                exit(1);
+            }
+        }
+    } else if (argc == 3) {
+        default_port = atoi(argv[2]);
+        path = argv[1];
+        if (chdir(path) != 0) {
+            perror(path);
+            exit(1);
+        }
+    }
+    printf("serve directory '%s'\n", path);
+
+    listenfd = open_listenfd(default_port);
+    if (listenfd > 0) {
+        printf("listen on port %d, fd is %d\n", default_port, listenfd);
+    } else {
+        perror("ERROR");
+        exit(listenfd);
+    }
+    // Ignore SIGPIPE signal, so if browser cancels the request, it
+    // won't kill the whole process.
+    signal(SIGPIPE, SIG_IGN);
+
+    int pid = fork();
+    if (pid == 0) {  //  child
+        while (1) {
+            connfd = accept(listenfd, (SA *) &clientaddr, &clientlen);
+            process(connfd, &clientaddr);
+            close(connfd);
+        }
+    } else if (pid < 0) {
+        printf("fork failed\n");
+        return false;
+    } else {  // parent
+        web_pid = pid;
+    }
+    return true;
+}
 /* Create new buffer for named file.
  * Name == NULL for stdin.
  * Return true if successful.
