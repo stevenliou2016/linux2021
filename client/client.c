@@ -70,8 +70,6 @@ static bool download_file(char *file_name)
     if (connect(connect_fd, (const struct sockaddr *) &server_addr,
                 sizeof(struct sockaddr_in)) == -1) {
         printf("connect failed\n");
-        printf("%d\n", __LINE__);
-        printf("%d\n", errno);
         close(connect_fd);
         return false;
     }
@@ -111,6 +109,8 @@ static bool download_file(char *file_name)
     }
     fclose(p_file);
     close(connect_fd);
+    free(server_buf);
+    free(buf);
 
     return true;
 }
@@ -130,18 +130,21 @@ bool download_dir(char *dir_name)
     socklen_t server_len = sizeof server_addr;
     int connect_fd = -1;
     char *buf = calloc(buf_max_size, sizeof(char));
-    char *server_buf = calloc(buf_max_size, sizeof(char));
-
     if (!is_mem_suc(buf)) {
         return false;
     }
 
+    char *server_buf = calloc(buf_max_size, sizeof(char));
     if (!is_mem_suc(server_buf)) {
+        free(buf);
         return false;
     }
 
-    if ((connect_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    if ((connect_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+        free(server_buf);
+        free(buf);
         return false;
+    }
 
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
@@ -151,11 +154,15 @@ bool download_dir(char *dir_name)
     if (res < 0) {
         printf("error: first parameter is not a valid address family\n");
         close(connect_fd);
+        free(server_buf);
+        free(buf);
         return false;
     } else if (res == 0) {
         printf(
             "char string (second parameter does not contain valid ipaddress\n");
         close(connect_fd);
+        free(server_buf);
+        free(buf);
         return false;
     }
 
@@ -163,6 +170,8 @@ bool download_dir(char *dir_name)
                 sizeof(struct sockaddr_in)) == -1) {
         printf("connect failed\n");
         close(connect_fd);
+        free(server_buf);
+        free(buf);
         return false;
     }
 
@@ -183,31 +192,45 @@ bool download_dir(char *dir_name)
     int file_index = 0;
     int dir_index = 0;
     char **file_array = calloc(buf_max_size, sizeof(char *));
-    char **dir_array = calloc(buf_max_size, sizeof(char *));
-    char *name = calloc(buf_max_size, sizeof(char));
-    char *target = calloc(buf_max_size, sizeof(char));
-
     if (file_array == NULL) {
         printf("malloc failed\n");
+	free(buf);
+	free(server_buf);
         return false;
     }
 
+    char **dir_array = calloc(buf_max_size, sizeof(char *));
     if (dir_array == NULL) {
         printf("malloc failed\n");
+	free(buf);
+	free(server_buf);
+	free(file_array);
         return false;
     }
 
+    char *name = calloc(buf_max_size, sizeof(char));
     if (!is_mem_suc(name)) {
+        free(buf);
+        free(server_buf);
+        free(file_array);
+	free(dir_array);
         return false;
     }
+
+    char *target = calloc(buf_max_size, sizeof(char));
 
     if (!is_mem_suc(target)) {
+        free(buf);
+        free(server_buf);
+        free(file_array);
+        free(dir_array);
+	free(name);
         return false;
     }
 
     rio_read_init(&rio, connect_fd);
 
-    while (0 < n) {
+    while (n > 0) {
         memset(server_buf, 0, sizeof(server_buf));
         n = rio_read_line(&rio, server_buf, MAXLINE);
 
@@ -226,6 +249,18 @@ bool download_dir(char *dir_name)
             }
             name[i] = '\0';
             if (!is_mem_suc(target)) {
+                free(buf);
+                free(server_buf);
+		for(int i = 0; i < file_index; i++){
+			free(file_array[i]);
+		}
+                free(file_array);
+		for(int i = 0; i < dir_index; i++){
+			free(dir_array[i]);
+		}
+                free(dir_array);
+                free(name);
+                free(target);
                 return false;
             }
             strcat(target, dir_name);
@@ -242,6 +277,18 @@ bool download_dir(char *dir_name)
                 if (dir_index < buf_max_size) {
                     dir_array[dir_index] = calloc(buf_max_size, sizeof(char));
                     if (!is_mem_suc(dir_array[dir_index])) {
+                        free(buf);
+                        free(server_buf);
+			for(int i = 0; i < file_index; i++){
+				free(file_array[i]);
+			}
+                        free(file_array);
+			for(int i = 0; i < dir_index; i++){
+				free(dir_array[i]);
+			}
+                        free(dir_array);
+                        free(name);
+                        free(target);
                         return false;
                     }
                     memcpy(dir_array[dir_index++], target, buf_max_size);
@@ -250,6 +297,18 @@ bool download_dir(char *dir_name)
                     char **dp = realloc(dir_array, buf_max_size);
                     if (dp == NULL) {
                         printf("malloc failed\n");
+			free(buf);
+                        free(server_buf);
+			for(int i = 0; i < file_index; i++){
+				free(file_array[i]);
+			}
+                        free(file_array);
+			for(int i = 0; i < dir_index; i++){
+				free(dir_array[i]);
+			}
+                        free(dir_array);
+                        free(name);
+                        free(target);
                         return false;
                     }
                     dir_array = dp;
@@ -258,6 +317,18 @@ bool download_dir(char *dir_name)
                 if (file_index < buf_max_size) {
                     file_array[file_index] = calloc(buf_max_size, sizeof(char));
                     if (!is_mem_suc(file_array[file_index])) {
+                        free(buf);
+                        free(server_buf);
+			for(int i = 0; i < file_index; i++){
+				free(file_array[i]);
+			}
+                        free(file_array);
+			for(int i = 0; i < dir_index; i++){
+				free(dir_array[i]);
+			}
+                        free(dir_array);
+                        free(name);
+                        free(target);
                         return false;
                     }
                     memcpy(file_array[file_index++], target, buf_max_size);
@@ -266,6 +337,18 @@ bool download_dir(char *dir_name)
                     char **fp = realloc(file_array, buf_max_size);
                     if (fp == NULL) {
                         printf("malloc failed\n");
+                        free(buf);
+                        free(server_buf);
+			for(int i = 0; i < file_index; i++){
+				free(file_array[i]);
+			}
+                        free(file_array);
+			for(int i = 0; i < dir_index; i++){
+				free(dir_array[i]);
+			}
+                        free(dir_array);
+                        free(name);
+                        free(target);
                         return false;
                     }
                     file_array = fp;
@@ -282,6 +365,18 @@ bool download_dir(char *dir_name)
     while (dir_array[i] != NULL) {
         download_dir(dir_array[i++]);
     }
+    free(buf);
+    free(server_buf);
+    free(name);
+    free(target);
+    for(int i = 0; i < file_index; i++){
+	free(file_array[i]);
+    }
+    free(file_array);
+    for(int i = 0; i < dir_index; i++){
+	free(dir_array[i]);
+    }
+    free(dir_array);
 
     return true;
 }
@@ -301,29 +396,34 @@ int main(int argc, char **argv)
     int max_size = 64;
     bool is_file = false;
     bool is_dir = false;
-    char *file_name;
-    char *dir_name;
+    char *file_name = calloc(max_size, sizeof(char));
+    char *dir_name = calloc(max_size, sizeof(char));
 
     // init
-    file_name = (char *) malloc(max_size);
     if (!is_mem_suc(file_name)) {
+        free(dir_name);
         return -1;
     }
     memset(file_name, 0, sizeof(file_name));
-    dir_name = (char *) malloc(max_size);
     if (!is_mem_suc(dir_name)) {
+        free(file_name);
         return -1;
     }
     strcpy(file_name, "qtest.c");
     memset(dir_name, 0, sizeof(dir_name));
     server_ip = calloc(16, sizeof(char));
     if (!is_mem_suc(server_ip)) {
+        free(file_name);
+	free(dir_name);
         return -1;
     }
     strncpy(server_ip, "140.118.155.192", 16);
     server_ip[15] = '\0';
     port = calloc(5, sizeof(char));
     if (!is_mem_suc(port)) {
+        free(file_name);
+        free(dir_name);
+        free(server_ip);
         return -1;
     }
     strncpy(port, "9999", 5);
@@ -338,6 +438,10 @@ int main(int argc, char **argv)
                 max_size *= 2;
                 char *f = realloc(file_name, max_size);
                 if (!is_mem_suc(f)) {
+                    free(file_name);
+                    free(dir_name);
+                    free(server_ip);
+                    free(port);
                     return -1;
                 }
                 file_name = f;
@@ -355,8 +459,13 @@ int main(int argc, char **argv)
             if (strlen(argv[optind - 1]) > max_size) {
                 char *dp = realloc(dir_name, max_size);
                 if (!is_mem_suc(dp)) {
+                    free(file_name);
+                    free(dir_name);
+                    free(server_ip);
+                    free(port);
                     return -1;
                 }
+		dir_name = dp;
             }
             memcpy(dir_name, argv[optind - 1], strlen(argv[optind - 1]));
             is_dir = true;
@@ -370,6 +479,10 @@ int main(int argc, char **argv)
     if (is_file || !is_dir) {
         if (!download_file(file_name)) {
             printf("download %s failed\n", file_name);
+	    free(file_name);
+            free(dir_name);
+            free(server_ip);
+            free(port);
             return -1;
         } else
             printf("download %s sucessfully\n", file_name);
@@ -377,9 +490,17 @@ int main(int argc, char **argv)
     if (is_dir) {
         if (!download_dir(dir_name)) {
             printf("download directory %s failed\n", dir_name);
+	    free(file_name);
+            free(dir_name);
+            free(server_ip);
+            free(port);
             return -1;
         } else
             printf("download directory %s sucessfully\n", dir_name);
     }
+    free(file_name);
+    free(dir_name);
+    free(server_ip);
+    free(port);
     return 0;
 }
