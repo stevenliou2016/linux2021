@@ -40,16 +40,16 @@ static bool download_file(char *file_name)
     char *buf = calloc(2 * buf_max_size, sizeof(char));
 
     if (!is_mem_suc(server_buf)) {
-        return -1;
+        return false;
     }
     if (!is_mem_suc(buf)) {
-        return -1;
+        return false;
     }
 
     p_file = fopen(file_name, "w");
 
     if ((connect_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-        return -1;
+        return false;
 
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
@@ -226,7 +226,7 @@ bool download_dir(char *dir_name)
             }
             name[i] = '\0';
             if (!is_mem_suc(target)) {
-                return -1;
+                return false;
             }
             strcat(target, dir_name);
             p = target;
@@ -367,7 +367,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (is_file || (!is_file && !is_dir)) {
+    if (is_file || !is_dir) {
         if (!download_file(file_name)) {
             printf("download %s failed\n", file_name);
             return -1;
