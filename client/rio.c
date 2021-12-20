@@ -39,10 +39,8 @@ static ssize_t rio_read(web_rio_t *rp, char *usrbuf, size_t n)
 {
     int cnt;
     while (rp->rio_cnt <= 0) { /* refill if buf is empty */
-                               // printf("=========%d\n",__LINE__);
 
         rp->rio_cnt = read(rp->rio_fd, rp->rio_buf, sizeof(rp->rio_buf));
-        // printf("=========%d\n",__LINE__);
         if (rp->rio_cnt < 0) {
             if (errno != EINTR) { /* interrupted by sig handler return */
                 return -1;

@@ -12,375 +12,26 @@
 #include <unistd.h>
 #include "rio.h"
 
-char *server_ip;
-char *port;
+typedef struct{
+    char **ele;
+    int idx;
+}data_array;    
+
 unsigned int buf_max_size = 1024;
-bool is_mem_suc(char *);
 
 static void print_help()
 {
-    printf("\nWEB CLIENT HELP\n\n");
-    printf("\tclient -h		#usage\n\n");
-    printf("\tclient -c serverIP	#connect to server\n\n");
-    printf("\tclient -f fileName	#download file\n\n");
-    printf("\tclient -p port\t	#port\n\n");
-    printf("\tclient -d directory	#download directory\n\n");
+    printf("\nWEB CLIENT HELP\n");
+    printf("\tclient -h		#usage\n");
+    printf("\tclient -c serverIP	#connect to server(IPv4)\n");
+    printf("\tclient -f fileName	#download file\n");
+    printf("\tclient -p port\t	#port range 0~65353\n");
+    printf("\tclient -d directory	#download directory\n");
 }
 
-static bool download_file(char *file_name)
-{
-    web_rio_t rio;
-    int n = 1;
-    struct sockaddr_in server_addr;
-    socklen_t server_len = sizeof server_addr;
-    int connect_fd = -1;
-    FILE *p_file;
-    bool is_writing = false;
-    char *server_buf = calloc(buf_max_size, sizeof(char));
-    char *buf = calloc(2 * buf_max_size, sizeof(char));
-
-    if (!is_mem_suc(server_buf)) {
-        return false;
-    }
-    if (!is_mem_suc(buf)) {
-        return false;
-    }
-
-    p_file = fopen(file_name, "w");
-
-    if ((connect_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-        return false;
-
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    uint32_t u_port = strtoul(port, NULL, 10);
-    server_addr.sin_port = htons(u_port);
-    int res = inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
-    if (res < 0) {
-        printf("error: first parameter is not a valid address family\n");
-        close(connect_fd);
-        return false;
-    } else if (res == 0) {
-        printf(
-            "char string (second parameter does not contain valid ipaddress\n");
-        close(connect_fd);
-        return false;
-    }
-
-    if (connect(connect_fd, (const struct sockaddr *) &server_addr,
-                sizeof(struct sockaddr_in)) == -1) {
-        printf("connect failed\n");
-        close(connect_fd);
-        return false;
-    }
-
-    sprintf(buf, "GET %s HTTP/1.1\r\nHost: %s:%s\r\n%s%s%s%s%s%s%s", file_name,
-            server_ip, port, "Connection: keep-alive\r\n",
-            "Cache-Control: max-age=0\r\n", "Upgrade-Insecure-Requests: 1\r\n",
-            "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 "
-            "Safari/537.36\r\n",
-            "Accept: "
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/"
-            "avif,image/webp,image/apng,*/*;q=0.8,application/"
-            "signed-exchange;v=b3;q=0.9\r\n",
-            "Accept-Encoding: gzip, deflate\r\n",
-            "Accept-Language: zh-TW,zh;q=0.9\r\n\r\n");
-    writen(connect_fd, buf, strlen(buf));
-
-    rio_read_init(&rio, connect_fd);
-    while (n > 0) {
-        n = rio_read_line(&rio, server_buf, MAXLINE);
-
-        if (strncmp(server_buf, "Content-type", 12) == 0) {
-            rio_read_line(&rio, server_buf, MAXLINE);
-            is_writing = true;
-            continue;
-        }
-
-        if (p_file == NULL) {
-            printf("open failure\n");
-            return false;
-        }
-
-        if (is_writing) {
-            fwrite(server_buf, 1, n, p_file);
-        }
-    }
-    fclose(p_file);
-    close(connect_fd);
-    free(server_buf);
-    free(buf);
-
-    return true;
-}
-
-bool download_dir(char *dir_name)
-{
-    if (access(dir_name, F_OK) != 0) {
-        if (mkdir(dir_name, S_IRWXU) == -1) {
-            printf("make a directory failed\n");
-            return false;
-        }
-    }
-
-    web_rio_t rio;
-    int n = 1;
-    struct sockaddr_in server_addr;
-    socklen_t server_len = sizeof server_addr;
-    int connect_fd = -1;
-    char *buf = calloc(buf_max_size, sizeof(char));
-    if (!is_mem_suc(buf)) {
-        return false;
-    }
-
-    char *server_buf = calloc(buf_max_size, sizeof(char));
-    if (!is_mem_suc(server_buf)) {
-        free(buf);
-        return false;
-    }
-
-    if ((connect_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-        free(server_buf);
-        free(buf);
-        return false;
-    }
-
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    uint32_t u_port = strtoul(port, NULL, 10);
-    server_addr.sin_port = htons(u_port);
-    int res = inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
-    if (res < 0) {
-        printf("error: first parameter is not a valid address family\n");
-        close(connect_fd);
-        free(server_buf);
-        free(buf);
-        return false;
-    } else if (res == 0) {
-        printf(
-            "char string (second parameter does not contain valid ipaddress\n");
-        close(connect_fd);
-        free(server_buf);
-        free(buf);
-        return false;
-    }
-
-    if (connect(connect_fd, (const struct sockaddr *) &server_addr,
-                sizeof(struct sockaddr_in)) == -1) {
-        printf("connect failed\n");
-        close(connect_fd);
-        free(server_buf);
-        free(buf);
-        return false;
-    }
-
-    sprintf(buf, "GET %s HTTP/1.1\r\nHost: %s:%s\r\n%s%s%s%s%s%s%s", dir_name,
-            server_ip, port, "Connection: keep-alive\r\n",
-            "Cache-Control: max-age=0\r\n", "Upgrade-Insecure-Requests: 1\r\n",
-            "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 "
-            "Safari/537.36\r\n",
-            "Accept: "
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/"
-            "avif,image/webp,image/apng,*/*;q=0.8,application/"
-            "signed-exchange;v=b3;q=0.9\r\n",
-            "Accept-Encoding: gzip, deflate\r\n",
-            "Accept-Language: zh-TW,zh;q=0.9\r\n\r\n");
-    writen(connect_fd, buf, strlen(buf));
-
-    int file_index = 0;
-    int dir_index = 0;
-    char **file_array = calloc(buf_max_size, sizeof(char *));
-    if (file_array == NULL) {
-        printf("malloc failed\n");
-	free(buf);
-	free(server_buf);
-        return false;
-    }
-
-    char **dir_array = calloc(buf_max_size, sizeof(char *));
-    if (dir_array == NULL) {
-        printf("malloc failed\n");
-	free(buf);
-	free(server_buf);
-	free(file_array);
-        return false;
-    }
-
-    char *name = calloc(buf_max_size, sizeof(char));
-    if (!is_mem_suc(name)) {
-        free(buf);
-        free(server_buf);
-        free(file_array);
-	free(dir_array);
-        return false;
-    }
-
-    char *target = calloc(buf_max_size, sizeof(char));
-
-    if (!is_mem_suc(target)) {
-        free(buf);
-        free(server_buf);
-        free(file_array);
-        free(dir_array);
-	free(name);
-        return false;
-    }
-
-    rio_read_init(&rio, connect_fd);
-
-    while (n > 0) {
-        memset(server_buf, 0, sizeof(server_buf));
-        n = rio_read_line(&rio, server_buf, MAXLINE);
-
-        if (strncmp(server_buf, "<tr><td><a href=", 16) == 0) {
-            char *p = server_buf;
-            int i = 0;
-            p += 17;
-
-            memset(name, 0, sizeof(name));
-            memset(target, 0, sizeof(target));
-
-            while (*p != '"') {
-                name[i] = *p;
-                i++;
-                p++;
-            }
-            name[i] = '\0';
-            if (!is_mem_suc(target)) {
-                free(buf);
-                free(server_buf);
-		for(int i = 0; i < file_index; i++){
-			free(file_array[i]);
-		}
-                free(file_array);
-		for(int i = 0; i < dir_index; i++){
-			free(dir_array[i]);
-		}
-                free(dir_array);
-                free(name);
-                free(target);
-                return false;
-            }
-            strcat(target, dir_name);
-            p = target;
-            while (*p != '\0') {
-                p++;
-            }
-            p--;
-            if (*p != '/') {
-                strcat(target, "/");
-            }
-            strcat(target, name);
-            if (name[i - 1] == '/') {
-                if (dir_index < buf_max_size) {
-                    dir_array[dir_index] = calloc(buf_max_size, sizeof(char));
-                    if (!is_mem_suc(dir_array[dir_index])) {
-                        free(buf);
-                        free(server_buf);
-			for(int i = 0; i < file_index; i++){
-				free(file_array[i]);
-			}
-                        free(file_array);
-			for(int i = 0; i < dir_index; i++){
-				free(dir_array[i]);
-			}
-                        free(dir_array);
-                        free(name);
-                        free(target);
-                        return false;
-                    }
-                    memcpy(dir_array[dir_index++], target, buf_max_size);
-                } else {
-                    buf_max_size *= 2;
-                    char **dp = realloc(dir_array, buf_max_size);
-                    if (dp == NULL) {
-                        printf("malloc failed\n");
-			free(buf);
-                        free(server_buf);
-			for(int i = 0; i < file_index; i++){
-				free(file_array[i]);
-			}
-                        free(file_array);
-			for(int i = 0; i < dir_index; i++){
-				free(dir_array[i]);
-			}
-                        free(dir_array);
-                        free(name);
-                        free(target);
-                        return false;
-                    }
-                    dir_array = dp;
-                }
-            } else {
-                if (file_index < buf_max_size) {
-                    file_array[file_index] = calloc(buf_max_size, sizeof(char));
-                    if (!is_mem_suc(file_array[file_index])) {
-                        free(buf);
-                        free(server_buf);
-			for(int i = 0; i < file_index; i++){
-				free(file_array[i]);
-			}
-                        free(file_array);
-			for(int i = 0; i < dir_index; i++){
-				free(dir_array[i]);
-			}
-                        free(dir_array);
-                        free(name);
-                        free(target);
-                        return false;
-                    }
-                    memcpy(file_array[file_index++], target, buf_max_size);
-                } else {
-                    buf_max_size *= 2;
-                    char **fp = realloc(file_array, buf_max_size);
-                    if (fp == NULL) {
-                        printf("malloc failed\n");
-                        free(buf);
-                        free(server_buf);
-			for(int i = 0; i < file_index; i++){
-				free(file_array[i]);
-			}
-                        free(file_array);
-			for(int i = 0; i < dir_index; i++){
-				free(dir_array[i]);
-			}
-                        free(dir_array);
-                        free(name);
-                        free(target);
-                        return false;
-                    }
-                    file_array = fp;
-                }
-            }
-        }
-    }
-    close(connect_fd);
-    int i = 0;
-    while (file_array[i] != NULL) {
-        download_file(file_array[i++]);
-    }
-    i = 0;
-    while (dir_array[i] != NULL) {
-        download_dir(dir_array[i++]);
-    }
-    free(buf);
-    free(server_buf);
-    free(name);
-    free(target);
-    for(int i = 0; i < file_index; i++){
-	free(file_array[i]);
-    }
-    free(file_array);
-    for(int i = 0; i < dir_index; i++){
-	free(dir_array[i]);
-    }
-    free(dir_array);
-
-    return true;
-}
-
+/* If memory is allocated successfully, return true
+ * Otherwise return false 
+ */ 
 bool is_mem_suc(char *s)
 {
     if (s == NULL) {
@@ -390,40 +41,358 @@ bool is_mem_suc(char *s)
     return true;
 }
 
+/* If the connection succeeds, return file descriptor
+ * On error, return -1 
+ * On success, close fd by caller 
+ */
+int connect_to_server(const char* ip, const char* port){
+    int fd = -1;
+    struct sockaddr_in server_addr;
+    socklen_t server_len = sizeof server_addr;
+
+    // Establish client socket
+    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        return -1;
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    // IPv4
+    server_addr.sin_family = AF_INET;
+    uint32_t u_port = strtoul(port, NULL, 10);
+    server_addr.sin_port = htons(u_port);
+    /* Convert IPv4 address from text to binary form.
+     * Return 1 on success,
+     * Return 0 if second parameter is not a valid network address
+     * Return -1 if first parameter is not a valid address family
+     */ 
+    int res = inet_pton(AF_INET, ip, &server_addr.sin_addr);
+    if (res < 0) {
+        printf("error: first parameter is not a valid address family\n");
+	close(fd);
+        return -1;
+    } else if (res == 0) {
+        printf(
+            "char string (second parameter does not contain valid ipaddress\n");
+	close(fd);
+        return -1;
+    }
+    if (connect(fd, (const struct sockaddr *) &server_addr,
+                sizeof(struct sockaddr_in)) == -1) {
+        printf("connect failed\n");
+	close(fd);
+        return -1;
+    }
+    return fd;
+}
+// Send request to get file
+void get_file(const char *file_name, int fd){
+    char *buf = calloc(20 + strlen(file_name), sizeof(char));
+
+    if (!is_mem_suc(buf)) {
+        printf("send request failed\n");
+    }
+
+    sprintf(buf, "GET %s HTTP/1.1\r\n\r\n", file_name);
+    writen(fd, buf, strlen(buf));
+    free(buf);
+}
+
+// Send request to get dir
+void get_dir(char *dir_name, int fd){
+    char *buf = calloc(20 + strlen(dir_name), sizeof(char));
+    char *p = dir_name;
+
+    if (!is_mem_suc(buf)) {
+        printf("send request failed\n");
+    }
+
+    while(*p != '\0'){
+        p++;
+    }
+    if(*(--p) != '/'){
+        strcat(dir_name, "/");
+    }
+    sprintf(buf, "GET %s HTTP/1.1\r\n\r\n", dir_name);
+    writen(fd, buf, strlen(buf));
+    free(buf);
+}
+
+static bool download_file(const char *file_name, char *ip, char *port)
+{
+    web_rio_t rio;
+    int n = 1; // Number of character from server
+    int fd = -1; // Socket file descriptor
+    FILE *p_file;
+    bool is_writing = false;
+    char *server_buf = calloc(buf_max_size, sizeof(char));
+
+    if (!is_mem_suc(server_buf)) {
+        return false;
+    }
+
+    if((fd = connect_to_server(ip, port)) == -1){
+        return false;
+    }
+    get_file(file_name, fd);
+    rio_read_init(&rio, fd);
+    p_file = fopen(file_name, "w");
+    if (p_file == NULL) {
+        printf("open failure\n");
+        return false;
+    }
+    while (n > 0) {
+        n = rio_read_line(&rio, server_buf, MAXLINE);
+
+	// Skip request part
+        if (strncmp(server_buf, "Content-type", 12) == 0) {
+            rio_read_line(&rio, server_buf, MAXLINE);
+            is_writing = true;
+            continue;
+        }
+
+        if (is_writing) {
+            fwrite(server_buf, 1, n, p_file);
+        }
+    }
+    fclose(p_file);
+    close(fd);
+    free(server_buf);
+
+    return true;
+}
+
+// Build directory if it does not exist
+bool build_dir(const char *dir_name){
+    if (access(dir_name, F_OK) != 0) {
+        if (mkdir(dir_name, S_IRWXU) == -1) {
+            printf("make a directory failed\n");
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Get name from request
+ * On success, return true
+ * On error, return false
+ */ 
+bool get_name(char* buf){
+    char *p = buf;
+    int i = 0;
+
+    if (strncmp(buf, "<tr><td><a href=", 16) == 0) {
+        p += 17;
+
+        while (*p != '"') {
+            buf[i] = *p;
+            i++;
+            p++;
+        }
+
+        buf[i] = '\0';
+
+	return true;
+    }
+    
+    return false;
+}
+
+bool is_dir(char *path){
+	char *p = path;
+
+	while(*p != '\0'){
+            p++;
+	}
+	if(*(--p) == '/'){
+          return true;
+	}
+	return false;
+}
+
+/* Concatenation
+ * On success, return true
+ * On error, return false
+ */ 
+bool complete_path(const char *dir_name, char *buf){
+    char *p = buf;
+    int len = strlen(dir_name) + strlen(buf) + 1;
+    char *path = calloc(buf_max_size, sizeof(char));
+
+    if(!is_mem_suc(path)){
+        return false;
+    }
+
+    strcat(path, dir_name);
+
+    while(*p != '\0'){
+        p++;
+    }
+
+    if(*(--p) != '/'){
+        strcat(path, "/");
+	len++;
+    }
+
+    strcat(path, buf);
+    path[len - 1] = '\0';
+    strncpy(buf, path, buf_max_size);
+    free(path);
+
+    return true;
+}
+
+/* On success, return true
+ * On error, return false
+ */ 
+bool resize(char **s, unsigned int max){
+    int len = sizeof(s) / sizeof(char*);
+    if(len >= max){
+        char **new = realloc(s, 2 * len);
+
+	if(new == NULL){
+            printf("malloc failed\n");
+            return false;
+	}
+	s = new;
+    }
+    return true;
+}
+
+/* Make and initialize a data_array 
+ * On error, return NULL
+ * On success, return data_array
+ */ 
+data_array* make_data_array(){
+    data_array* temp = malloc(sizeof(data_array));
+    if(temp == NULL){
+        printf("malloc failed\n");
+	return NULL;
+    }
+    temp->ele = calloc(buf_max_size, sizeof(char*));
+    if(temp->ele == NULL){
+        printf("malloc failed\n");
+	return NULL;
+    }
+    temp->idx = 0;
+
+    return temp;
+}
+
+/* Add data into data_array
+ * On success, return true
+ * On error, return false
+ */ 
+bool add_data(data_array *da, const char *data){
+    da->ele[da->idx] = calloc(buf_max_size, sizeof(char));
+
+    if(!is_mem_suc(da->ele[da->idx])){
+        return false;
+    }
+    memcpy(da->ele[da->idx++], data, strlen(data) + 1);
+
+    return true;
+}
+
+void free_data_array(data_array *da){
+    for(int i = 0; i < da->idx; i++){
+        free(da->ele[i]);
+    }
+    free(da->ele);
+    free(da);
+}
+
+bool download_dir(char *dir_name, char *ip, char *port)
+{
+    if(!build_dir(dir_name)){
+        return false;
+    }
+    web_rio_t rio;
+    int n = 1; // Number of character from server
+    int fd = -1; // Client file descriptor
+    char *server_buf = calloc(buf_max_size, sizeof(char));
+    data_array* file_array = make_data_array();
+    data_array* dir_array = make_data_array();
+
+    if (!is_mem_suc(server_buf)) {
+        return false;
+    }
+
+    if((fd = connect_to_server(ip, port)) == -1){
+        return false;
+    }
+    get_dir(dir_name, fd);
+    rio_read_init(&rio, fd);
+
+    while (n > 0) {
+        memset(server_buf, 0, sizeof(server_buf));
+        n = rio_read_line(&rio, server_buf, MAXLINE);
+        if(!get_name(server_buf)){
+            continue;
+	}
+
+        if(!complete_path(dir_name, server_buf)){
+            return false;
+        }
+
+        if(is_dir(server_buf)){
+            if (dir_array->idx < buf_max_size) {
+		if(!add_data(dir_array, server_buf)){
+                    return false;
+		}
+            } else {
+                if(!resize(dir_array->ele, buf_max_size)){
+                    return false;
+                }
+	    }
+	} else {
+            if (file_array->idx < buf_max_size) {
+                if(!add_data(file_array, server_buf)){
+                    return false;
+                }
+            } else {
+                if(!resize(file_array->ele, buf_max_size)){
+                    return false;
+                }
+            }
+        }
+    }
+    close(fd);
+    for(int i = 0; i < file_array->idx; i++){
+        download_file(file_array->ele[i], ip, port);
+    }
+    for(int i = 0; i < dir_array->idx; i++){
+        download_dir(dir_array->ele[i], ip, port);
+    }
+    free(server_buf);
+    free_data_array(file_array);
+    free_data_array(dir_array);
+
+    return true;
+}
+
+
 int main(int argc, char **argv)
 {
     int ch = 'h';
-    int max_size = 64;
-    bool is_file = false;
-    bool is_dir = false;
-    char *file_name = calloc(max_size, sizeof(char));
-    char *dir_name = calloc(max_size, sizeof(char));
+    unsigned int max_size = 256;
 
-    // init
+    char *file_name = calloc(max_size, sizeof(char));
     if (!is_mem_suc(file_name)) {
-        free(dir_name);
         return -1;
     }
-    memset(file_name, 0, sizeof(file_name));
+
+    char *dir_name = calloc(max_size, sizeof(char));
     if (!is_mem_suc(dir_name)) {
-        free(file_name);
         return -1;
     }
-    strcpy(file_name, "qtest.c");
-    memset(dir_name, 0, sizeof(dir_name));
-    server_ip = calloc(16, sizeof(char));
+
+    char *server_ip = calloc(16, sizeof(char));
     if (!is_mem_suc(server_ip)) {
-        free(file_name);
-	free(dir_name);
         return -1;
     }
     strncpy(server_ip, "140.118.155.192", 16);
-    server_ip[15] = '\0';
-    port = calloc(5, sizeof(char));
+
+    char *port = calloc(6, sizeof(char)); 
     if (!is_mem_suc(port)) {
-        free(file_name);
-        free(dir_name);
-        free(server_ip);
         return -1;
     }
     strncpy(port, "9999", 5);
@@ -438,37 +407,37 @@ int main(int argc, char **argv)
                 max_size *= 2;
                 char *f = realloc(file_name, max_size);
                 if (!is_mem_suc(f)) {
-                    free(file_name);
-                    free(dir_name);
-                    free(server_ip);
-                    free(port);
                     return -1;
                 }
                 file_name = f;
             }
             memcpy(file_name, argv[optind - 1], strlen(argv[optind - 1]));
-            is_file = true;
             break;
         case 'c':
+	    if(strlen(argv[optind - 1]) > 15){
+                printf("It is not a valid IPv4 address\n");
+            }
             memcpy(server_ip, argv[optind - 1], strlen(argv[optind - 1]));
+	    server_ip[strlen(argv[optind - 1])] = '\0';
             break;
         case 'p':
+	    if(atoi(argv[optind - 1]) > 65353 || atoi(argv[optind - 1]) < 0){
+                printf("It is not a valid port\n");
+                return -1;
+            }
             memcpy(port, argv[optind - 1], strlen(argv[optind - 1]));
+	    port[strlen(argv[optind - 1])] = '\0';
+	    
             break;
         case 'd':
             if (strlen(argv[optind - 1]) > max_size) {
                 char *dp = realloc(dir_name, max_size);
                 if (!is_mem_suc(dp)) {
-                    free(file_name);
-                    free(dir_name);
-                    free(server_ip);
-                    free(port);
                     return -1;
                 }
 		dir_name = dp;
             }
             memcpy(dir_name, argv[optind - 1], strlen(argv[optind - 1]));
-            is_dir = true;
             break;
         default:
             printf("Unknown option\n");
@@ -476,24 +445,16 @@ int main(int argc, char **argv)
         }
     }
 
-    if (is_file || !is_dir) {
-        if (!download_file(file_name)) {
+    if (file_name[0] != '\0') {
+        if (!download_file(file_name, server_ip, port)) {
             printf("download %s failed\n", file_name);
-	    free(file_name);
-            free(dir_name);
-            free(server_ip);
-            free(port);
             return -1;
         } else
             printf("download %s sucessfully\n", file_name);
     }
-    if (is_dir) {
-        if (!download_dir(dir_name)) {
+    if (dir_name[0] != '\0') {
+        if (!download_dir(dir_name, server_ip, port)) {
             printf("download directory %s failed\n", dir_name);
-	    free(file_name);
-            free(dir_name);
-            free(server_ip);
-            free(port);
             return -1;
         } else
             printf("download directory %s sucessfully\n", dir_name);

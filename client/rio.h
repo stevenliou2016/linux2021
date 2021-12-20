@@ -2,13 +2,8 @@
 #define _RIO_H
 #include <unistd.h>
 
-#define LISTENQ 1024 /* second argument to listen() */
 #define MAXLINE 1024 /* max length of a line */
 #define WEB_RIO_BUFSIZE 1024
-
-#ifndef DEFAULT_PORT
-#define DEFAULT_PORT 9999 /* use this port if none given as arg to main() */
-#endif
 
 typedef struct {
     int rio_fd;                    /* descriptor for this buf */

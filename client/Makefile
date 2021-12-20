@@ -1,13 +1,15 @@
-client: client.o rio.o
-	gcc -g client.o rio.o -o client
+CC = gcc
+CFLAGS = -g -c
+OBJS = client.o rio.o
 
-client.o: client.c
-	gcc -g -c client.c -g -o client.o
+client: $(OBJS)
+	$(CC) $(OBJS) -o $@
 
-rio.o: rio.c
-	gcc -g -c rio.c -o rio.o
+%.o: %.c
+	$(CC) $(CFLAGS) $< -o $@
+
 
 .PHONY: clean
 
 clean:
-	rm client client.o rio.o
+	rm client $(OBJS)
